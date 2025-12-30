@@ -1,127 +1,71 @@
-import { INode, INodeData, INodeParams } from '../../../src/Interface'
-import { getBaseClasses } from '../../../src/utils'
-import { AzureOpenAIInput, OpenAI, OpenAIInput } from 'langchain/llms/openai'
+import { AzureOpenAIInput, AzureOpenAI, OpenAIInput } from '@langchain/openai'
+import { BaseCache } from '@langchain/core/caches'
+import { BaseLLMParams } from '@langchain/core/language_models/llms'
+import { ICommonObject, INode, INodeData, INodeOptionsValue, INodeParams } from '../../../src/Interface'
+import { getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
+import { getModels, MODEL_TYPE } from '../../../src/modelLoader'
+
+const serverCredentialsExists =
+    !!process.env.AZURE_OPENAI_API_KEY &&
+    !!process.env.AZURE_OPENAI_API_INSTANCE_NAME &&
+    !!process.env.AZURE_OPENAI_API_DEPLOYMENT_NAME &&
+    !!process.env.AZURE_OPENAI_API_VERSION
 
 class AzureOpenAI_LLMs implements INode {
     label: string
     name: string
+    version: number
     type: string
     icon: string
     category: string
     description: string
     baseClasses: string[]
+    credential: INodeParams
     inputs: INodeParams[]
 
     constructor() {
         this.label = 'Azure OpenAI'
         this.name = 'azureOpenAI'
+        this.version = 4.0
         this.type = 'AzureOpenAI'
         this.icon = 'Azure.svg'
         this.category = 'LLMs'
         this.description = 'Wrapper around Azure OpenAI large language models'
-        this.baseClasses = [this.type, ...getBaseClasses(OpenAI)]
+        this.baseClasses = [this.type, ...getBaseClasses(AzureOpenAI)]
+        this.credential = {
+            label: 'Connect Credential',
+            name: 'credential',
+            type: 'credential',
+            credentialNames: ['azureOpenAIApi'],
+            optional: serverCredentialsExists
+        }
         this.inputs = [
             {
-                label: 'Azure OpenAI Api Key',
-                name: 'azureOpenAIApiKey',
-                type: 'password'
+                label: 'Cache',
+                name: 'cache',
+                type: 'BaseCache',
+                optional: true
             },
             {
                 label: 'Model Name',
                 name: 'modelName',
-                type: 'options',
-                options: [
-                    {
-                        label: 'text-davinci-003',
-                        name: 'text-davinci-003'
-                    },
-                    {
-                        label: 'ada',
-                        name: 'ada'
-                    },
-                    {
-                        label: 'text-ada-001',
-                        name: 'text-ada-001'
-                    },
-                    {
-                        label: 'babbage',
-                        name: 'babbage'
-                    },
-                    {
-                        label: 'text-babbage-001',
-                        name: 'text-babbage-001'
-                    },
-                    {
-                        label: 'curie',
-                        name: 'curie'
-                    },
-                    {
-                        label: 'text-curie-001',
-                        name: 'text-curie-001'
-                    },
-                    {
-                        label: 'davinci',
-                        name: 'davinci'
-                    },
-                    {
-                        label: 'text-davinci-001',
-                        name: 'text-davinci-001'
-                    },
-                    {
-                        label: 'text-davinci-002',
-                        name: 'text-davinci-002'
-                    },
-                    {
-                        label: 'text-davinci-fine-tune-002',
-                        name: 'text-davinci-fine-tune-002'
-                    },
-                    {
-                        label: 'gpt-35-turbo',
-                        name: 'gpt-35-turbo'
-                    }
-                ],
-                default: 'text-davinci-003',
-                optional: true
+                type: 'asyncOptions',
+                loadMethod: 'listModels',
+                default: 'text-davinci-003'
             },
             {
                 label: 'Temperature',
                 name: 'temperature',
                 type: 'number',
+                step: 0.1,
                 default: 0.9,
                 optional: true
-            },
-            {
-                label: 'Azure OpenAI Api Instance Name',
-                name: 'azureOpenAIApiInstanceName',
-                type: 'string',
-                placeholder: 'YOUR-INSTANCE-NAME'
-            },
-            {
-                label: 'Azure OpenAI Api Deployment Name',
-                name: 'azureOpenAIApiDeploymentName',
-                type: 'string',
-                placeholder: 'YOUR-DEPLOYMENT-NAME'
-            },
-            {
-                label: 'Azure OpenAI Api Version',
-                name: 'azureOpenAIApiVersion',
-                type: 'options',
-                options: [
-                    {
-                        label: '2023-03-15-preview',
-                        name: '2023-03-15-preview'
-                    },
-                    {
-                        label: '2022-12-01',
-                        name: '2022-12-01'
-                    }
-                ],
-                default: '2023-03-15-preview'
             },
             {
                 label: 'Max Tokens',
                 name: 'maxTokens',
                 type: 'number',
+                step: 1,
                 optional: true,
                 additionalParams: true
             },
@@ -129,6 +73,7 @@ class AzureOpenAI_LLMs implements INode {
                 label: 'Top Probability',
                 name: 'topP',
                 type: 'number',
+                step: 0.1,
                 optional: true,
                 additionalParams: true
             },
@@ -136,6 +81,7 @@ class AzureOpenAI_LLMs implements INode {
                 label: 'Best Of',
                 name: 'bestOf',
                 type: 'number',
+                step: 1,
                 optional: true,
                 additionalParams: true
             },
@@ -143,6 +89,7 @@ class AzureOpenAI_LLMs implements INode {
                 label: 'Frequency Penalty',
                 name: 'frequencyPenalty',
                 type: 'number',
+                step: 0.1,
                 optional: true,
                 additionalParams: true
             },
@@ -150,6 +97,7 @@ class AzureOpenAI_LLMs implements INode {
                 label: 'Presence Penalty',
                 name: 'presencePenalty',
                 type: 'number',
+                step: 0.1,
                 optional: true,
                 additionalParams: true
             },
@@ -157,43 +105,67 @@ class AzureOpenAI_LLMs implements INode {
                 label: 'Timeout',
                 name: 'timeout',
                 type: 'number',
+                step: 1,
+                optional: true,
+                additionalParams: true
+            },
+            {
+                label: 'BasePath',
+                name: 'basepath',
+                type: 'string',
                 optional: true,
                 additionalParams: true
             }
         ]
     }
 
-    async init(nodeData: INodeData): Promise<any> {
-        const azureOpenAIApiKey = nodeData.inputs?.azureOpenAIApiKey as string
+    //@ts-ignore
+    loadMethods = {
+        async listModels(): Promise<INodeOptionsValue[]> {
+            return await getModels(MODEL_TYPE.LLM, 'azureOpenAI')
+        }
+    }
+
+    async init(nodeData: INodeData, _: string, options: ICommonObject): Promise<any> {
         const temperature = nodeData.inputs?.temperature as string
         const modelName = nodeData.inputs?.modelName as string
-        const azureOpenAIApiInstanceName = nodeData.inputs?.azureOpenAIApiInstanceName as string
-        const azureOpenAIApiDeploymentName = nodeData.inputs?.azureOpenAIApiDeploymentName as string
-        const azureOpenAIApiVersion = nodeData.inputs?.azureOpenAIApiVersion as string
         const maxTokens = nodeData.inputs?.maxTokens as string
         const topP = nodeData.inputs?.topP as string
         const frequencyPenalty = nodeData.inputs?.frequencyPenalty as string
         const presencePenalty = nodeData.inputs?.presencePenalty as string
         const timeout = nodeData.inputs?.timeout as string
         const bestOf = nodeData.inputs?.bestOf as string
+        const streaming = nodeData.inputs?.streaming as boolean
+        const basePath = nodeData.inputs?.basepath as string
 
-        const obj: Partial<AzureOpenAIInput> & Partial<OpenAIInput> = {
-            temperature: parseInt(temperature, 10),
+        const credentialData = await getCredentialData(nodeData.credential ?? '', options)
+        const azureOpenAIApiKey = getCredentialParam('azureOpenAIApiKey', credentialData, nodeData)
+        const azureOpenAIApiInstanceName = getCredentialParam('azureOpenAIApiInstanceName', credentialData, nodeData)
+        const azureOpenAIApiDeploymentName = getCredentialParam('azureOpenAIApiDeploymentName', credentialData, nodeData)
+        const azureOpenAIApiVersion = getCredentialParam('azureOpenAIApiVersion', credentialData, nodeData)
+
+        const cache = nodeData.inputs?.cache as BaseCache
+
+        const obj: Partial<AzureOpenAIInput> & BaseLLMParams & Partial<OpenAIInput> = {
+            temperature: parseFloat(temperature),
             modelName,
             azureOpenAIApiKey,
             azureOpenAIApiInstanceName,
             azureOpenAIApiDeploymentName,
-            azureOpenAIApiVersion
+            azureOpenAIApiVersion,
+            streaming: streaming ?? true
         }
 
         if (maxTokens) obj.maxTokens = parseInt(maxTokens, 10)
-        if (topP) obj.topP = parseInt(topP, 10)
-        if (frequencyPenalty) obj.frequencyPenalty = parseInt(frequencyPenalty, 10)
-        if (presencePenalty) obj.presencePenalty = parseInt(presencePenalty, 10)
+        if (topP) obj.topP = parseFloat(topP)
+        if (frequencyPenalty) obj.frequencyPenalty = parseFloat(frequencyPenalty)
+        if (presencePenalty) obj.presencePenalty = parseFloat(presencePenalty)
         if (timeout) obj.timeout = parseInt(timeout, 10)
         if (bestOf) obj.bestOf = parseInt(bestOf, 10)
+        if (cache) obj.cache = cache
+        if (basePath) obj.azureOpenAIBasePath = basePath
 
-        const model = new OpenAI(obj)
+        const model = new AzureOpenAI(obj)
         return model
     }
 }
